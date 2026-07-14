@@ -8,16 +8,16 @@ export const seo = getSeo({
     site: "@remix_run",
     creator: "@remix_run",
     title: "React Router",
-    card: "summary",
+    card: "summary_large_image",
     image: {
-      url: "/twitterimage.jpg",
+      url: "/og-image.png",
       alt: "React Router logo",
     },
   },
   openGraph: {
     images: [
       {
-        url: "/ogimage.png",
+        url: "/og-image.png",
         alt: "React Router logo",
         height: 627,
         width: 1200,

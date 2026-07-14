@@ -1,4 +1,4 @@
-import { useLocation, useNavigation } from "@remix-run/react";
+import { unstable_useRouterState as useRouterState } from "react-router";
 import * as React from "react";
 
 /**
@@ -11,20 +11,19 @@ export let DetailsMenu = React.forwardRef<
 >(({ ...props }, forwardedRef) => {
   let { onToggle, onMouseDown, onTouchStart, onFocus, open, ...rest } = props;
   let [isOpen, setIsOpen] = React.useState(false);
-  let location = useLocation();
-  let navigation = useNavigation();
+  let { active, pending } = useRouterState();
   let clickRef = React.useRef<boolean>(false);
   let focusRef = React.useRef<boolean>(false);
 
   React.useEffect(() => {
-    if (navigation.formData) {
+    if (pending?.formData) {
       setIsOpen(false);
     }
-  }, [navigation]);
+  }, [pending]);
 
   React.useEffect(() => {
     setIsOpen(false);
-  }, [location.key]);
+  }, [active.location.key]);
 
   React.useEffect(() => {
     if (isOpen) {
@@ -52,22 +51,22 @@ export let DetailsMenu = React.forwardRef<
       ref={forwardedRef}
       open={open ?? isOpen}
       onToggle={(event) => {
-        onToggle && onToggle(event);
+        if (onToggle) onToggle(event);
         if (event.defaultPrevented) return;
         setIsOpen(event.currentTarget.open);
       }}
       onMouseDown={(event) => {
-        onMouseDown && onMouseDown(event);
+        if (onMouseDown) onMouseDown(event);
         if (event.defaultPrevented) return;
         if (isOpen) clickRef.current = true;
       }}
       onTouchStart={(event) => {
-        onTouchStart && onTouchStart(event);
+        if (onTouchStart) onTouchStart(event);
         if (event.defaultPrevented) return;
         if (isOpen) clickRef.current = true;
       }}
       onFocus={(event) => {
-        onFocus && onFocus(event);
+        if (onFocus) onFocus(event);
         if (event.defaultPrevented) return;
         if (isOpen) focusRef.current = true;
       }}

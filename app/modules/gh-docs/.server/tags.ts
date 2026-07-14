@@ -10,10 +10,25 @@ export async function getTags(repo: string) {
   return tagsCache.fetch(repo);
 }
 
-export function getLatestVersion(tags: string[]) {
-  return tags.filter((tag) =>
-    semver.satisfies(tag, "*", { includePrerelease: false })
-  )[0];
+export function getLatestMajorVersions(tags: string[]) {
+  let sortedTags = [...tags].sort(semver.rcompare);
+  let versionsByMajor = new Map<number, string>();
+
+  for (let tag of sortedTags) {
+    let version = semver.parse(tag);
+    if (
+      !version ||
+      version.major < 6 ||
+      version.prerelease.length > 0 ||
+      versionsByMajor.has(version.major)
+    ) {
+      continue;
+    }
+
+    versionsByMajor.set(version.major, tag);
+  }
+
+  return [...versionsByMajor.values()];
 }
 
 declare global {
@@ -36,12 +51,12 @@ global.tagsCache ??= new LRUCache<string, string[]>({
 
 // TODO: implementation details of the react router site leaked into here cause
 // I'm in a hurry now, sorry!
-export async function getAllReleases(
+async function getAllReleases(
   owner: string,
   repo: string,
   primaryPackage: string,
   page = 1,
-  releases: string[] = []
+  releases: string[] = [],
 ): Promise<string[]> {
   console.log("Fetching fresh releases, page", page);
   const { data, headers, status } = await octokit.rest.repos.listReleases({
@@ -64,12 +79,12 @@ export async function getAllReleases(
           // release notes (sometimes react-router, sometimes react-dom) so we
           // just check the release name here
           release.name?.startsWith("v6") ||
-            // ideally all we care about is release.name, but we have some old
-            // releases that don't have that set, so we check the tag name too
-            // After changesets, we look for react-router@6.4.0
-            release.tag_name.split("@")[0] === primaryPackage ||
-            // pre-changesets, tag_name started with "v"
-            release.tag_name.startsWith("v6")
+          // ideally all we care about is release.name, but we have some old
+          // releases that don't have that set, so we check the tag name too
+          // After changesets, we look for react-router@6.4.0
+          release.tag_name.split("@")[0] === primaryPackage ||
+          // pre-changesets, tag_name started with "v"
+          release.tag_name.startsWith("v6"),
         );
       })
       .map((release) => {
@@ -80,7 +95,7 @@ export async function getAllReleases(
             : // with changesets its like react-router@6.4.0
               release.tag_name.split("@")[1] || "unknown"
         );
-      })
+      }),
   );
 
   let parsed = parseLinkHeader(headers.link);
@@ -90,7 +105,7 @@ export async function getAllReleases(
       repo,
       primaryPackage,
       page + 1,
-      releases
+      releases,
     );
   }
 

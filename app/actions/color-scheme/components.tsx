@@ -1,0 +1,74 @@
+import { useLayoutEffect, useMemo } from "react";
+import {
+  unstable_useRoute as useRoute,
+  unstable_useRouterState as useRouterState,
+} from "react-router";
+import type { ColorScheme } from "./server";
+
+export function getColorScheme(formData: FormData): ColorScheme | null {
+  let colorScheme = formData.get("colorScheme");
+
+  if (
+    colorScheme === "dark" ||
+    colorScheme === "light" ||
+    colorScheme === "system"
+  ) {
+    return colorScheme;
+  }
+
+  return null;
+}
+
+export function useColorScheme(): ColorScheme {
+  let rootRoute = useRoute("root");
+  let colorScheme = rootRoute.loaderData?.colorScheme ?? "system";
+
+  let formData = useRouterState().pending?.formData;
+  let optimisticColorScheme = formData ? getColorScheme(formData) : null;
+  return optimisticColorScheme || colorScheme;
+}
+
+export function ColorSchemeScript() {
+  let colorScheme = useColorScheme();
+
+  let script = useMemo(
+    () => `
+      let colorScheme = ${JSON.stringify(colorScheme)};
+      if (colorScheme === "system") {
+        let media = window.matchMedia("(prefers-color-scheme: dark)")
+        if (media.matches) document.documentElement.classList.add("dark");
+      }
+    `,
+    [], // eslint-disable-line
+    // we don't want this script to ever change
+  );
+
+  if (typeof document !== "undefined") {
+    // eslint-disable-next-line
+    useLayoutEffect(() => {
+      if (colorScheme === "light") {
+        document.documentElement.classList.remove("dark");
+      } else if (colorScheme === "dark") {
+        document.documentElement.classList.add("dark");
+      } else if (colorScheme === "system") {
+        function check(media: MediaQueryList | MediaQueryListEvent) {
+          if (media.matches) {
+            document.documentElement.classList.add("dark");
+          } else {
+            document.documentElement.classList.remove("dark");
+          }
+        }
+
+        let media = window.matchMedia("(prefers-color-scheme: dark)");
+        check(media);
+
+        media.addEventListener("change", check);
+        return () => media.removeEventListener("change", check);
+      } else {
+        console.error("Impossible color scheme state:", colorScheme);
+      }
+    }, [colorScheme]);
+  }
+
+  return <script dangerouslySetInnerHTML={{ __html: script }} />;
+}

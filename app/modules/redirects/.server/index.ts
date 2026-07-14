@@ -1,3 +1,4 @@
+import { type MiddlewareFunction } from "react-router";
 import { checkUrl } from "./check-url";
 import { getRedirects } from "./get-redirects";
 
@@ -12,11 +13,10 @@ import { getRedirects } from "./get-redirects";
  * /docs/*  /api/*
  * ```
  *
- * @param request Web Fetch Request to possibly redirect
+ * @param url Normalized location URL (see `future.v8_passThroughRequests`)
  */
-export async function handleRedirects(request: Request): Promise<void> {
+export const handleRedirects: MiddlewareFunction = async ({ url }) => {
   let redirects = await getRedirects();
-  let url = new URL(request.url);
   let response = await checkUrl(url.pathname, redirects);
   if (response) throw response;
-}
+};

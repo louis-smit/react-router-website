@@ -1,0 +1,321 @@
+import { Await, Link } from "react-router";
+import { Suspense } from "react";
+import semver from "semver";
+
+import iconsHref from "~/icons.svg";
+import { getStats } from "~/modules/stats";
+import { getRepoTags } from "~/modules/gh-docs/.server";
+import { getLatestMajorVersions } from "~/modules/gh-docs/.server/tags";
+import type { Route } from "./+types/splash";
+
+export const meta: Route.MetaFunction = ({ matches }) => {
+  let { isProductionHost } = matches[0].loaderData;
+  let robots = isProductionHost ? "index,follow" : "noindex, nofollow";
+  return [
+    { title: "React Router Official Documentation" },
+    { name: "robots", content: robots },
+    { name: "googlebot", content: robots },
+  ];
+};
+
+type QuickLink = {
+  icon: string;
+  title: string;
+  to: string;
+  attrs?: React.AnchorHTMLAttributes<HTMLAnchorElement>;
+};
+
+const quicklinks: QuickLink[] = [
+  {
+    icon: "atom",
+    title: "Docs",
+    to: "home",
+  },
+  {
+    icon: "github-outline",
+    title: "GitHub",
+    to: "https://github.com/remix-run/react-router",
+  },
+  {
+    icon: "discord-outline",
+    title: "Discord",
+    to: "https://remix.run/discord",
+    attrs: {
+      target: "_blank",
+      rel: "noopener noreferrer",
+    },
+  },
+  {
+    icon: "x-logo",
+    title: "@ReactRouter",
+    to: "https://x.com/reactrouter",
+  },
+];
+
+type Highlight = {
+  icon: string;
+  title: string;
+  description: string;
+};
+
+const v7Highlights: Highlight[] = [
+  {
+    icon: "chain",
+    title: "Non-breaking",
+    description:
+      "Upgrading from v6 to v7 is a non-breaking upgrade. Keep using React Router the same way you already do.",
+  },
+  {
+    icon: "box",
+    title: "Bridge to React 19",
+    description:
+      "All new bundling, server rendering, pre-rendering, and streaming features allow you bridge the gap from React 18 to 19 incrementally.",
+  },
+  {
+    icon: "cd",
+    title: "Type Safety",
+    description:
+      "New typegen provides first class types for route params, loader data, actions, and more.",
+  },
+];
+
+const v8Highlights: Highlight[] = [
+  {
+    icon: "chain",
+    title: "Non-breaking",
+    description:
+      "Upgrading from v7 to v8 is a non-breaking upgrade. Keep using React Router the same way you already do.",
+  },
+  {
+    icon: "box",
+    title: "Modern Baseline",
+    description:
+      "Node 22+, Vite 7+, React 19+, ESM-only. Upgrading the baselines allows us to embrace the latest these tools have to offer and keep the core of React Router simple.",
+  },
+  {
+    icon: "cd",
+    title: "Community Driven",
+    description:
+      "React Router is developed via an Open Governance model. We're focused on shipping what the community is asking for. Go participate in open Proposals or open one of your own!",
+  },
+];
+
+type Adventure = {
+  title: string;
+  description: string;
+  linkText: string;
+  linkTo: string;
+};
+
+const v7Adventures: Adventure[] = [
+  {
+    title: "I'm new!",
+    description: "Learn how to get the most out of React Router",
+    linkText: "Start Here",
+    linkTo: "home",
+  },
+  {
+    title: "I'm on v6",
+    description: "Upgrade to v7 in just a few steps",
+    linkText: "Upgrade Now",
+    linkTo: "upgrading/v6",
+  },
+  {
+    title: "I want to adopt framework features",
+    description:
+      "Learn how to adopt the new framework features in your existing React Router app",
+    linkText: "Adopt Framework Features",
+    linkTo: "upgrading/component-routes",
+  },
+  {
+    title: "I'm stuck",
+    description: "Join GitHub discussions for help",
+    linkText: "Get Help",
+    linkTo: "https://remix.run/discord",
+  },
+];
+
+const v8Adventures: Adventure[] = [
+  {
+    title: "I'm new!",
+    description: "Learn how to get the most out of React Router",
+    linkText: "Start Here",
+    linkTo: "home",
+  },
+  {
+    title: "I'm on v7",
+    description: "Upgrade to v8 in just a few steps",
+    linkText: "Upgrade Now",
+    linkTo: "upgrading/v7",
+  },
+  {
+    title: "I want to adopt framework features",
+    description:
+      "Learn how to adopt the new framework features in your existing React Router app",
+    linkText: "Adopt Framework Features",
+    linkTo: "upgrading/component-routes",
+  },
+  {
+    title: "I'm stuck",
+    description: "Join GitHub discussions for help",
+    linkText: "Get Help",
+    linkTo: "https://remix.run/discord",
+  },
+];
+
+export let loader = async () => {
+  let stats = getStats();
+  let tags = await getRepoTags();
+  let latestMajorVersion = getLatestMajorVersions(tags)[0];
+  let latestMajor = semver.parse(latestMajorVersion)?.major ?? 7;
+
+  return {
+    stats,
+    highlights: latestMajor >= 8 ? v8Highlights : v7Highlights,
+    adventures: latestMajor >= 8 ? v8Adventures : v7Adventures,
+    latestMajor,
+    docSearchVersion: `v${latestMajor}`,
+  };
+};
+
+export default function Home({ loaderData }: Route.ComponentProps) {
+  let { highlights, adventures, latestMajor } = loaderData;
+
+  return (
+    <main className="flex min-h-full w-full flex-col items-center justify-center dark:bg-gray-900">
+      <section className="from-23% via-82% flex w-full flex-col items-center gap-y-12 bg-gradient-to-b from-[#CCD2DE] via-[#D9DDE6] to-white to-100% py-[96px] dark:from-[#595F6C] dark:via-[#202228] dark:via-65% dark:to-gray-900 md:py-[160px]">
+        <h1>
+          <span className="block">
+            <img
+              src="/splash/hero-3d-logo.webp"
+              alt="React Router logo, six dots in an upward triangle (one on top, two in the middle, three on the bottom) with a path of three highlighted and connected from top to bottom, next to the text React Router"
+              className="aspect-[32/5] w-[360px] dark:hidden md:w-[480px] lg:w-[640px] 2xl:w-[960px]"
+            />
+            <img
+              src="/splash/hero-3d-logo.dark.webp"
+              alt="React Router logo, six dots in an upward triangle (one on top, two in the middle, three on the bottom) with a path of three highlighted and connected from top to bottom, next to the text React Router"
+              className="hidden aspect-[32/5] w-[360px] dark:block md:w-[480px] lg:w-[640px] 2xl:w-[960px]"
+            />
+          </span>
+        </h1>
+        <p className="mx-12 max-w-[540px] text-center text-xl text-gray-700 dark:text-gray-200 md:mx-0">
+          A user‑obsessed, standards‑focused, multi‑strategy router you can
+          deploy anywhere.
+        </p>
+        <div className="flex flex-col divide-y divide-gray-200 overflow-hidden rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700 md:h-[72px] md:flex-row md:divide-x md:divide-y-0">
+          {quicklinks.map(({ icon, title, to, attrs }) => (
+            <Link
+              key={title}
+              to={to}
+              prefetch="intent"
+              className="flex justify-center gap-x-2 px-9 py-6 text-gray-700 hover:bg-gray-50 dark:text-gray-200 dark:hover:bg-gray-800"
+              {...attrs}
+            >
+              <svg className="h-6 w-6" aria-hidden="true">
+                <use href={`${iconsHref}#${icon}`} />
+              </svg>
+              {title}
+            </Link>
+          ))}
+        </div>
+      </section>
+      <section className="flex w-full flex-col items-center gap-y-24 px-12 pb-12 dark:bg-gray-900 md:gap-y-16 lg:gap-y-12">
+        <div className="grid gap-x-16 gap-y-6 md:grid-flow-col">
+          <img
+            src={`/splash/v${latestMajor}-badge-1.svg`}
+            alt={`Get React Router ${latestMajor}.0`}
+            className="h-[52px] w-[140px] md:h-[72px] md:w-[194px]"
+          />
+          <img
+            src={`/splash/v${latestMajor}-badge-2.svg`}
+            alt={`React Router v${latestMajor}`}
+            className="h-[52px] w-[140px] md:h-[72px] md:w-[194px]"
+          />
+        </div>
+        <h2 className="text-center text-3xl font-semibold text-gray-800 dark:text-gray-100">
+          What to expect from this version:
+        </h2>
+        <dl className="grid max-w-[540px] gap-x-12 gap-y-6 lg:max-w-5xl lg:grid-flow-col">
+          {highlights.map(({ icon, title, description }) => (
+            <div key={title} className="relative flex flex-col gap-2 pl-14">
+              <dt className="text-xl font-semibold text-gray-800 dark:text-gray-100">
+                <svg
+                  className="absolute left-0 top-0 h-8 w-8"
+                  aria-hidden="true"
+                >
+                  <use href={`${iconsHref}#${icon}`} />
+                </svg>
+                {title}
+              </dt>
+              <dd className="text-[#757575]">{description}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
+      <section className="flex flex-col gap-y-12 p-12">
+        <h2 className="mx-[-10px] text-center text-3xl font-semibold text-gray-800 dark:text-gray-100">
+          Choose Your Adventure:
+        </h2>
+        <div className="grid max-w-[1320px] gap-6 md:grid-cols-2 2xl:grid-cols-4">
+          {adventures.map(({ title, description, linkText, linkTo }) => (
+            <Link
+              key={title}
+              to={linkTo}
+              prefetch="intent"
+              className="flex flex-col justify-between gap-y-6 rounded-lg border border-[#D9D9D9] p-8 hover:bg-gray-50 dark:border-gray-700 dark:hover:bg-gray-700"
+            >
+              <div className="flex flex-col gap-y-4">
+                <h3 className="text-2xl font-semibold dark:text-gray-100">
+                  {title}
+                </h3>
+                <p className="text-[#757575] dark:text-gray-300">
+                  {description}
+                </p>
+              </div>
+              <p className="flex min-h-10 place-content-center place-items-center rounded-lg bg-gray-900 px-4 py-2 text-center text-gray-50 dark:bg-white dark:text-gray-900 md:whitespace-nowrap">
+                {linkText}
+              </p>
+            </Link>
+          ))}
+        </div>
+      </section>
+      <section className="grid w-full place-content-center p-12">
+        <Suspense fallback={null}>
+          <Await resolve={loaderData.stats} errorElement={null}>
+            {(stats) => (
+              <dl className="grid grid-cols-1 gap-x-6 gap-y-16 md:grid-cols-2">
+                {stats.map(({ svgId, count, label }) => (
+                  <div key={svgId} className="flex w-[308px] gap-2">
+                    <svg className="h-8 w-8 text-gray-600" aria-hidden="true">
+                      <use href={`${iconsHref}#${svgId}`} />
+                    </svg>
+                    <div className="flex flex-col">
+                      <dd className="text-2xl font-semibold text-gray-700 dark:text-gray-200">
+                        {count?.toLocaleString("en-US")}
+                      </dd>
+                      <dt className="text-gray-500 dark:text-gray-400">
+                        {label}
+                      </dt>
+                    </div>
+                  </div>
+                ))}
+              </dl>
+            )}
+          </Await>
+        </Suspense>
+      </section>
+      <section className="grid h-[205px] w-full place-content-center place-items-center gap-y-6 bg-gray-50 p-12 dark:bg-black">
+        <a href="https://shopify.com" target="_blank" rel="noopener noreferrer">
+          <img
+            src="/splash/shopify-badge.svg"
+            alt="Developed by Shopify"
+            className="h-[68px] w-[190px]"
+          />
+        </a>
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          © {new Date().getFullYear()} Shopify, Inc.
+        </p>
+      </section>
+    </main>
+  );
+}

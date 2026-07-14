@@ -25,7 +25,7 @@ global.statCountsCache ??= new LRUCache<string, StatCounts>({
   ttl: 1000 * 60 * 60, // 1 hour
   allowStale: true,
   noDeleteOnFetchRejection: true,
-  fetchMethod: async (key) => {
+  fetchMethod: async () => {
     console.log("Fetching fresh stats");
     let [npmDownloads, githubContributors, githubStars, githubDependents] =
       await Promise.all([
@@ -43,34 +43,32 @@ global.statCountsCache ??= new LRUCache<string, StatCounts>({
   },
 });
 
-export async function getStats(): Promise<Stats[] | undefined> {
+export async function getStats(): Promise<Stats[]> {
   let cacheKey = "ONE_STATS_KEY_TO_RULE_THEM_ALL";
   let statCounts = await statCountsCache.fetch(cacheKey);
 
-  return statCounts
-    ? [
-        {
-          count: statCounts.npmDownloads,
-          label: "Downloads on npm",
-          svgId: "stat-download",
-        },
-        {
-          count: statCounts.githubContributors,
-          label: "Contributors on GitHub",
-          svgId: "stat-users",
-        },
-        {
-          count: statCounts.githubStars,
-          label: "Stars on GitHub",
-          svgId: "stat-star",
-        },
-        {
-          count: statCounts.githubDependents,
-          label: "Dependents on GitHub",
-          svgId: "stat-box",
-        },
-      ]
-    : undefined;
+  return [
+    {
+      count: statCounts.npmDownloads,
+      label: "Downloads on npm",
+      svgId: "stat-download",
+    },
+    {
+      count: statCounts.githubContributors,
+      label: "Contributors on GitHub",
+      svgId: "stat-users",
+    },
+    {
+      count: statCounts.githubStars,
+      label: "Stars on GitHub",
+      svgId: "stat-star",
+    },
+    {
+      count: statCounts.githubDependents,
+      label: "Dependents on GitHub",
+      svgId: "stat-box",
+    },
+  ];
 }
 
 /**
@@ -102,17 +100,17 @@ async function fetchNpmDownloads() {
       urls.push(
         `https://api.npmjs.org/downloads/point/${year}-01-${day}:${
           year + 1
-        }-01-${day}/react-router`
+        }-01-${day}/react-router`,
       );
       year++;
       day++;
     }
     const queryData = await Promise.all(
-      urls.map((url) => fetch(url).then((res) => res.json()))
+      urls.map((url) => fetch(url).then((res) => res.json())),
     );
     const allTimeDownloads = queryData.reduce(
       (acc, { downloads = 0 }) => acc + downloads,
-      0
+      0,
     );
     return allTimeDownloads;
   } catch (e) {
@@ -120,7 +118,7 @@ async function fetchNpmDownloads() {
     // on June 17, 2022
     console.error(
       "Failed to fetch stats for npm downloads. Falling back to a hard-coded value",
-      e
+      e,
     );
     return 844617220;
   }
@@ -148,7 +146,7 @@ async function fetchGithubContributors() {
   } catch (e) {
     console.error(
       "Failed to fetch stats for GitHub contributors. Falling back to a hard-coded value",
-      e
+      e,
     );
     // Return a hard-coded value retrieved manually on Jun 15, 2022
     return 737;
@@ -171,7 +169,7 @@ async function fetchGithubStars() {
   } catch (e) {
     console.log(
       "Failed to fetch stats for GitHub stars. Falling back to a hard-coded value",
-      e
+      e,
     );
     // Return hard-coded value retrieved Jun 15, 2022
     return 47245;

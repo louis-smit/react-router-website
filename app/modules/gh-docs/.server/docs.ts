@@ -3,7 +3,7 @@ import LRUCache from "lru-cache";
 import parseYamlHeader from "gray-matter";
 import invariant from "tiny-invariant";
 import { getRepoContent } from "./repo-content";
-import { getRepoTarballStream } from "./repo-tarball";
+import { getRepoTarball } from "./repo-tarball";
 import { createTarFileProcessor } from "./tarball";
 import { load as $ } from "cheerio";
 
@@ -11,19 +11,31 @@ interface MenuDocAttributes {
   title: string;
   order?: number;
   new?: boolean;
+  unstable?: boolean;
   [key: string]: any;
 }
 
-export interface MenuDoc {
-  attrs: MenuDocAttributes;
-  children: MenuDoc[];
-  filename: string;
-  hasContent: boolean;
-  slug: string;
-}
+export type MenuDoc =
+  | {
+      attrs: MenuDocAttributes;
+      children: MenuDoc[];
+      filename: string;
+      hasContent: boolean;
+      slug: string;
+      slugs?: undefined;
+    }
+  | {
+      attrs: MenuDocAttributes;
+      children: MenuDoc[];
+      filename: string;
+      hasContent: boolean;
+      slug?: undefined;
+      slugs: string[];
+    };
 
 export interface Doc extends Omit<MenuDoc, "hasContent"> {
   html: string;
+  md: string;
   headings: {
     headingLevel: string;
     html: string | null;
@@ -39,16 +51,15 @@ declare global {
 let NO_CACHE = process.env.NO_CACHE;
 
 global.menuCache ??= new LRUCache<string, MenuDoc[]>({
-  // let menuCache = new LRUCache<string, MenuDoc[]>({
-  max: 10,
+  max: 60,
   ttl: NO_CACHE ? 1 : 300000, // 5 minutes
   allowStale: !NO_CACHE,
   noDeleteOnFetchRejection: true,
   fetchMethod: async (cacheKey) => {
     console.log(`Fetching fresh menu: ${cacheKey}`);
     let [repo, ref] = cacheKey.split(":");
-    let stream = await getRepoTarballStream(repo, ref);
-    let menu = await getMenuFromStream(stream);
+    let tarball = await getRepoTarball(repo, ref);
+    let menu = await getMenuFromTarball(tarball);
     return menu;
   },
 });
@@ -56,14 +67,13 @@ global.menuCache ??= new LRUCache<string, MenuDoc[]>({
 export async function getMenu(
   repo: string,
   ref: string,
-  lang: string
 ): Promise<MenuDoc[] | undefined> {
   return menuCache.fetch(`${repo}:${ref}`);
 }
 
 function parseAttrs(
   md: string,
-  filename: string
+  filename: string,
 ): { content: string; attrs: Doc["attrs"] } {
   let { data, content } = parseYamlHeader(md);
   return {
@@ -105,7 +115,7 @@ async function fetchDoc(key: string): Promise<Doc> {
 
   // sorry, cheerio is so much easier than using rehype stuff.
   let headings = createTableOfContentsFromHeadings(html);
-  return { attrs, filename, html, slug, headings, children: [] };
+  return { attrs, filename, html, md, slug, headings, children: [] };
 }
 
 // create table of contents from h2 and h3 headings
@@ -124,7 +134,7 @@ function createTableOfContentsFromHeadings(html: string) {
 export async function getDoc(
   repo: string,
   ref: string,
-  slug: string
+  slug: string,
 ): Promise<Doc | undefined> {
   let key = `${repo}:${ref}:${slug}`;
   let doc = await docCache.fetch(key);
@@ -134,9 +144,9 @@ export async function getDoc(
 /**
  * Exported for unit tests
  */
-export async function getMenuFromStream(stream: NodeJS.ReadableStream) {
+export async function getMenuFromTarball(tarball: Uint8Array) {
   let docs: MenuDoc[] = [];
-  let processFiles = createTarFileProcessor(stream);
+  let processFiles = createTarFileProcessor(tarball);
   await processFiles(async ({ filename, content }) => {
     let { attrs, content: md } = parseAttrs(content, filename);
     let slug = makeSlug(filename);
@@ -157,7 +167,7 @@ export async function getMenuFromStream(stream: NodeJS.ReadableStream) {
   });
 
   // sort so we can process parents before children
-  docs.sort((a, b) => (a.slug < b.slug ? -1 : a.slug > b.slug ? 1 : 0));
+  docs.sort((a, b) => (a.slug! < b.slug! ? -1 : a.slug! > b.slug! ? 1 : 0));
 
   // construct the hierarchy
   let tree: MenuDoc[] = [];
@@ -165,8 +175,8 @@ export async function getMenuFromStream(stream: NodeJS.ReadableStream) {
   for (let doc of docs) {
     let { slug } = doc;
 
-    let parentSlug = slug.substring(0, slug.lastIndexOf("/"));
-    map.set(slug, doc);
+    let parentSlug = slug!.substring(0, slug!.lastIndexOf("/"));
+    map.set(slug!, doc);
 
     if (parentSlug) {
       let parent = map.get(parentSlug);
@@ -180,7 +190,8 @@ export async function getMenuFromStream(stream: NodeJS.ReadableStream) {
   let sortDocs = (a: MenuDoc, b: MenuDoc) =>
     (a.attrs.order || Infinity) - (b.attrs.order || Infinity);
 
-  // sort the parents and children
+  // sort three generations, we don't render farther than that, so we don't need
+  // recursion here unless somebody wants some interview practice
   tree.sort(sortDocs);
   for (let category of tree) {
     category.children.sort(sortDocs);

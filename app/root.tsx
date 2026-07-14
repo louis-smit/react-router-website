@@ -1,66 +1,61 @@
-import type {
-  LinksFunction,
-  LoaderFunctionArgs,
-  MetaFunction,
-} from "@remix-run/node";
 import {
+  isRouteErrorResponse,
   Link,
   Links,
   Meta,
   Outlet,
   Scripts,
   ScrollRestoration,
-} from "@remix-run/react";
-import { json } from "@remix-run/node";
-import { CACHE_CONTROL, whyDoWeNotHaveGoodMiddleWareYetRyan } from "./http";
+  type MiddlewareFunction,
+} from "react-router";
+import { CACHE_CONTROL } from "./http";
 
-import { parseColorScheme } from "./modules/color-scheme/server";
+import { parseColorScheme } from "./actions/color-scheme/server";
 import {
   ColorSchemeScript,
   useColorScheme,
-} from "./modules/color-scheme/components";
+} from "./actions/color-scheme/components";
 import { isHost } from "./modules/http-utils/is-host";
 import iconsHref from "~/icons.svg";
-import stylesheet from "~/styles/tailwind.css?url";
+import { DocSearch } from "./modules/docsearch";
 
-export const links: LinksFunction = () => [
-  { rel: "stylesheet", href: stylesheet },
+import tailwindCss from "~/styles/tailwind.css?url";
+import type { Route } from "./+types/root";
+
+import { ensureSecure } from "~/modules/http-utils/ensure-secure";
+import { handleRedirects } from "~/modules/redirects/.server";
+import { removeTrailingSlashes } from "~/modules/http-utils/remove-slashes";
+import { handleMarkdownRequest } from "~/modules/gh-docs/.server/markdown-request";
+import { handleMajorVersionRedirects } from "~/modules/gh-docs/.server/major-version-redirect";
+
+export const middleware: MiddlewareFunction[] = [
+  ensureSecure,
+  removeTrailingSlashes,
+  handleMajorVersionRedirects,
+  handleRedirects,
+  handleMarkdownRequest,
 ];
 
-export const meta: MetaFunction<typeof loader> = ({ data }) => {
-  return [
-    {
-      title: "React Router",
-    },
-    {
-      name: "robots",
-      content: data?.isProductionHost ? "index,follow" : "noindex, nofollow",
-    },
-    {
-      name: "googlebot",
-      content: data?.isProductionHost ? "index,follow" : "noindex, nofollow",
-    },
-  ];
-};
-
-export let loader = async ({ request }: LoaderFunctionArgs) => {
-  await whyDoWeNotHaveGoodMiddleWareYetRyan(request);
-
+export async function loader({ request }: Route.LoaderArgs) {
   let colorScheme = await parseColorScheme(request);
   let isProductionHost = isHost("reactrouter.com", request);
 
-  return json(
-    { colorScheme, isProductionHost },
-    {
-      headers: {
-        "Cache-Control": CACHE_CONTROL.doc,
-        Vary: "Cookie",
-      },
-    }
-  );
-};
+  return { colorScheme, isProductionHost };
+}
 
-export default function App() {
+export function headers() {
+  return {
+    // default all caching to deployments
+    "Cache-Control": CACHE_CONTROL.doc,
+    Vary: "Cookie",
+  };
+}
+
+export function meta({ error }: Route.MetaArgs) {
+  return [{ title: error ? "Oops | React Router" : "React Router" }];
+}
+
+export function Layout({ children }: { children: React.ReactNode }) {
   let colorScheme = useColorScheme();
 
   return (
@@ -85,9 +80,11 @@ export default function App() {
           type="image/png"
           media="(prefers-color-scheme: dark)"
         />
+        <link rel="stylesheet" href={tailwindCss} precedence="high" />
         <Meta />
         <Links />
       </head>
+
       <body className="bg-white text-black antialiased selection:bg-blue-200 selection:text-black dark:bg-gray-900 dark:text-white dark:selection:bg-blue-800 dark:selection:text-white">
         <img
           src={iconsHref}
@@ -95,39 +92,32 @@ export default function App() {
           hidden
           // this img tag simply forces the icons to be loaded at a higher
           // priority than the scripts (chrome only for now)
-          // @ts-expect-error
-          fetchpriority="high"
+          fetchPriority="high"
         />
-        <Outlet />
+        <DocSearch>{children}</DocSearch>
         <ScrollRestoration />
-        {/* @ts-expect-error */}
-        <Scripts defer />
+        <Scripts />
       </body>
     </html>
   );
 }
 
-export function ErrorBoundary({ error }: { error: Error }) {
-  console.error(error);
+export default function App() {
+  return <Outlet />;
+}
+
+export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
+  if (isRouteErrorResponse(error) && error.status === 500) {
+    console.error(error);
+  }
+
   return (
-    <html lang="en">
-      <head>
-        <meta charSet="utf-8" />
-        <meta name="viewport" content="width=device-width,initial-scale=1" />
-        <title>Oops | React Router</title>
-        <Links />
-      </head>
-      <body className="flex bg-white text-black dark:bg-gray-900 dark:text-white">
-        <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <div className="font-bold">Oops</div>
-          <div>Something went wrong</div>
-          <Link to="/" className="mt-8 underline">
-            Go Home
-          </Link>
-        </div>
-        <ScrollRestoration />
-        <Scripts />
-      </body>
-    </html>
+    <div className="absolute inset-0 flex flex-col items-center justify-center">
+      <div className="font-bold">Oops</div>
+      <div>Something went wrong</div>
+      <Link to="/" className="mt-8 underline">
+        Go Home
+      </Link>
+    </div>
   );
 }

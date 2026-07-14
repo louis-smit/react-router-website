@@ -22,21 +22,27 @@ export interface ProcessorOptions {
 let processor: Awaited<ReturnType<typeof getProcessor>>;
 export async function processMarkdown(
   content: string,
-  options?: ProcessorOptions
+  options?: ProcessorOptions,
 ) {
   processor = processor || (await getProcessor(options));
   let { attributes, body: raw } = parseFrontMatter(content);
-  let vfile = await processor.process(raw);
-  let html = vfile.value.toString();
+
+  // Create a new VFile with the content and add frontmatter to its data
+  let result = await processor.process({
+    value: raw,
+    data: { matter: attributes }, // This will be available to all plugins
+  });
+  let html = result.value.toString();
   return { attributes, raw, html };
 }
 
-export async function getProcessor(options?: ProcessorOptions) {
+async function getProcessor(options?: ProcessorOptions) {
   let [
     { unified },
     { default: remarkGfm },
     { default: remarkParse },
     { default: remarkRehype },
+    { default: compatTokens },
     { default: rehypeSlug },
     { default: rehypeStringify },
     { default: rehypeAutolinkHeadings },
@@ -46,6 +52,7 @@ export async function getProcessor(options?: ProcessorOptions) {
     import("remark-gfm"),
     import("remark-parse"),
     import("remark-rehype"),
+    import("./compat-tokens"),
     import("rehype-slug"),
     import("rehype-stringify"),
     import("rehype-autolink-headings"),
@@ -57,6 +64,7 @@ export async function getProcessor(options?: ProcessorOptions) {
     .use(plugins.stripLinkExtPlugin, options)
     .use(plugins.remarkCodeBlocksShiki, options)
     .use(remarkGfm)
+    .use(compatTokens)
     .use(remarkRehype, { allowDangerousHtml: true })
     .use(rehypeStringify, { allowDangerousHtml: true })
     .use(rehypeSlug)
@@ -65,17 +73,17 @@ export async function getProcessor(options?: ProcessorOptions) {
 
 type InternalPlugin<
   Input extends string | Unist.Node | undefined,
-  Output
+  Output,
 > = Unified.Plugin<[ProcessorOptions?], Input, Output>;
 
-export async function loadPlugins() {
+async function loadPlugins() {
   let [{ visit, SKIP }, { htmlEscape }] = await Promise.all([
     import("unist-util-visit"),
     import("escape-goat"),
   ]);
 
   const stripLinkExtPlugin: InternalPlugin<UnistNode.Root, UnistNode.Root> = (
-    options = {}
+    options = {},
   ) => {
     return async function transformer(tree: UnistNode.Root) {
       visit(tree, "link", (node, index, parent) => {
@@ -99,7 +107,7 @@ export async function loadPlugins() {
   const remarkCodeBlocksShiki: InternalPlugin<
     UnistNode.Root,
     UnistNode.Root
-  > = (options) => {
+  > = () => {
     let theme: Awaited<ReturnType<typeof toShikiTheme>>;
     let highlighter: Awaited<ReturnType<typeof getHighlighter>>;
 
@@ -107,7 +115,7 @@ export async function loadPlugins() {
       theme = theme || toShikiTheme(themeJson as any);
       highlighter = highlighter || (await getHighlighter({ themes: [theme] }));
       let fgColor = convertFakeHexToCustomProp(
-        highlighter.getForegroundColor(theme.name) || ""
+        highlighter.getForegroundColor(theme.name) || "",
       );
       let langs: Shiki.Lang[] = [
         "js",
@@ -145,6 +153,7 @@ export async function loadPlugins() {
           nodeProperties,
           removedLines,
           startingLineNumber,
+          usesDiffMarkers,
           usesLineNumbers,
         } = getCodeBlockMeta();
 
@@ -152,6 +161,28 @@ export async function loadPlugins() {
         return SKIP;
 
         async function highlightNodes() {
+          let diffLineMarkers: Array<"add" | "remove" | undefined> = [];
+
+          if (usesDiffMarkers) {
+            code = code
+              .split(/\r?\n/)
+              .map((line) => {
+                if (line[0] === "+") {
+                  diffLineMarkers.push("add");
+                  return `${line[1] === " " ? " " : ""}${line.slice(1)}`;
+                }
+
+                if (line[0] === "-") {
+                  diffLineMarkers.push("remove");
+                  return `${line[1] === " " ? " " : ""}${line.slice(1)}`;
+                }
+
+                diffLineMarkers.push(undefined);
+                return line;
+              })
+              .join("\n");
+          }
+
           let tokens = getThemedTokens({ code, language });
           let children = tokens.map(
             (lineTokens, zeroBasedLineNumber): Hast.Element => {
@@ -174,7 +205,7 @@ export async function loadPlugins() {
                         children: [content],
                       }
                     : content;
-                }
+                },
               );
 
               children.push({
@@ -182,12 +213,19 @@ export async function loadPlugins() {
                 value: "\n",
               });
 
-              let isDiff = addedLines.length > 0 || removedLines.length > 0;
+              let isDiff =
+                usesDiffMarkers ||
+                addedLines.length > 0 ||
+                removedLines.length > 0;
               let diffLineNumber = startingLineNumber - 1;
               let lineNumber = zeroBasedLineNumber + startingLineNumber;
               let highlightLine = highlightLines?.includes(lineNumber);
-              let removeLine = removedLines.includes(lineNumber);
-              let addLine = addedLines.includes(lineNumber);
+              let addLine =
+                addedLines.includes(lineNumber) ||
+                diffLineMarkers[zeroBasedLineNumber] === "add";
+              let removeLine =
+                removedLines.includes(lineNumber) ||
+                diffLineMarkers[zeroBasedLineNumber] === "remove";
               if (!removeLine) {
                 diffLineNumber++;
               }
@@ -205,7 +243,7 @@ export async function loadPlugins() {
                 },
                 children,
               };
-            }
+            },
           );
 
           let nodeValue = {
@@ -261,6 +299,7 @@ export async function loadPlugins() {
           let addedLines = parseLineHighlights(metaParams.get("add"));
           let removedLines = parseLineHighlights(metaParams.get("remove"));
           let highlightLines = parseLineHighlights(metaParams.get("lines"));
+          let usesDiffMarkers = metaParams.has("diff") && language !== "diff";
           let startValNum = metaParams.has("start")
             ? Number(metaParams.get("start"))
             : 1;
@@ -281,6 +320,7 @@ export async function loadPlugins() {
             nodeProperties,
             removedLines,
             startingLineNumber,
+            usesDiffMarkers,
             usesLineNumbers,
           };
         }
